@@ -1,6 +1,6 @@
 {
   "name": "fugo",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Sort of react hooks for rxjs.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -32,6 +32,6 @@
   },
   "dependencies": {
     "react": "16.8.4",
-    "rxjs": "6.4.0"
+    "rxjs": "6.5.2"
   }
 }

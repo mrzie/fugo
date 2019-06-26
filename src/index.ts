@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useLayoutEffect, useCallback , Dispatch, SetStateAction} from "react";
+import { useState, useMemo, useEffect, useLayoutEffect, useCallback, Dispatch, SetStateAction } from "react";
 import { Observable, BehaviorSubject, Subject, Subscription } from "rxjs";
 
 export const useObservable = <T>(maker: () => Observable<T>, initValue: T) => {
@@ -25,10 +25,15 @@ export const useObservable = <T>(maker: () => Observable<T>, initValue: T) => {
     return value;
 };
 
-export const useEventHandler = <Event>() => {
+export const useEventHandler = <Event>(defaultHandler?: (source: Observable<Event>) => Subscription | void) => {
     const subject = useMemo(() => new Subject<Event>(), []);
     const callback = useCallback((e: Event) => subject.next(e), []);
-    useEffect(() => () => subject.complete(), []);
+    useEffect(() => {
+        if (defaultHandler instanceof Array) {
+            defaultHandler(subject);
+        }
+        return () => subject.complete();
+    }, []);
     return [callback, subject] as [typeof callback, Subject<Event>];
 };
 
