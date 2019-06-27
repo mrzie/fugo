@@ -29,8 +29,11 @@ const App = () => {
 };
 ```
 
-### useEventHandler():[(e: E) => void, Subject<E>]
+### useEventHandler(defaultHandler?: (source: Observable) => void):[(e: E) => void, Subject<E>]
 Returns a tuple of `[callback, subject]`. The subject emits first params of callback everytime the callback is called.
+
+You can use `defaultHandler` to specificate the default subscription for subject.
+
 ```javascript
 // ...
 import { useEventHandler } from 'fugo';
