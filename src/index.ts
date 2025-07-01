@@ -1,59 +1,111 @@
-import { useState, useMemo, useEffect, useLayoutEffect, useCallback, Dispatch, SetStateAction } from "react";
-import { Observable, BehaviorSubject, Subject, Subscription } from "rxjs";
+import {DependencyList, useEffect, useMemo, useSyncExternalStore, useRef, useLayoutEffect, useCallback} from 'react';
+import {BehaviorSubject, distinctUntilChanged, Observable, Subject, Subscription} from 'rxjs';
 
-export const useObservable = <T>(maker: () => Observable<T>, initValue: T) => {
-    const [state, setState] = useState(initValue);
+export const useObservable = <T>(maker: () => Observable<T>, initValue: () => T) => {
+    const state$ = useBehaviorSubject(() => initValue());
+    const makerRef = useRef(maker);
+
     useEffect(() => {
-        const subscription = maker().subscribe(v => setState(v));
+        // 不直接subscribe(state$)是因为上游error会通过useSyncExternalStore抛出
+        const $$ = makerRef.current().subscribe(next => state$.next(next));
 
-        return () => subscription.unsubscribe();
+        return () => $$.unsubscribe();
+    }, [state$]);
+
+    const state = useSyncExternalStore(
+        onChange => {
+            const $$ = state$.subscribe(() => {
+                onChange();
+            });
+            return () => $$.unsubscribe();
+        },
+        () => state$.getValue()
+    );
+
+    return state;
+};
+
+export const useBehaviorSubject = <T>(initValue: () => T) => {
+    const subjectRef = useRef<BehaviorSubject<T>>(undefined!);
+    const isMounted = useRef(false);
+
+    // 每次重新挂载时创建新实例
+    if (!isMounted.current) {
+        subjectRef.current = new BehaviorSubject<T>(initValue());
+        isMounted.current = true;
+    }
+
+    useEffect(() => {
+        return () => {
+            // 真实卸载时执行清理
+            isMounted.current = false;
+            subjectRef.current?.complete();
+        };
     }, []);
 
-    return value;
+    return subjectRef.current!;
+};
+export const useSubject = <T>() => {
+    const subjectRef = useRef<Subject<T>>(undefined!);
+    const isMounted = useRef(false);
+
+    // 每次重新挂载时创建新实例
+    if (!isMounted.current) {
+        subjectRef.current = new Subject<T>();
+        isMounted.current = true;
+    }
+
+    useEffect(() => {
+        return () => {
+            // 真实卸载时执行清理
+            isMounted.current = false;
+            subjectRef.current?.complete();
+        };
+    }, []);
+
+    return subjectRef.current!;
 };
 
 export const useEventHandler = <Event>(defaultHandler?: (source: Observable<Event>) => Subscription | void) => {
-    const subject = useMemo(() => new Subject<Event>(), []);
-    const callback = useCallback((e: Event) => subject.next(e), []);
+    const subject = useSubject<Event>();
+    const callback = useCallback((e: Event) => subject.next(e), [subject]);
+    const defaultHandlerRef = useRef(defaultHandler);
     useEffect(() => {
-        if (defaultHandler instanceof Function) {
-            defaultHandler(subject);
+        const handler = defaultHandlerRef.current;
+        if (handler instanceof Function) {
+            const subscription = handler(subject);
+            if (subscription instanceof Subscription) {
+                return () => subscription.unsubscribe();
+            }
         }
-        return () => subject.complete();
-    }, []);
+    }, [subject]);
     return [callback, subject] as [typeof callback, Subject<Event>];
 };
 
-export const useBehaviorSubject = <T>(initValue: T) => {
-    const subject = useMemo(() => new BehaviorSubject(initValue), []);
+export const useObservableFrom = <T>(value: T) => {
+    const subject$ = useSubject<T>();
+    const subjectRef = useRef(subject$);
 
-    useEffect(() => () => subject.complete(), []);
-    return subject;
-};
+    useEffect(() => {
+        subjectRef.current.next(value);
+    }, [value]);
 
-export const useSubject = <T>() => {
-    const subject = useMemo(() => new Subject<T>(), []);
-
-    useEffect(() => () => subject.complete(), []);
-    return subject;
-};
-
-export const useObservableFrom = <T>(inputs: T) => {
-    const subject$ = useBehaviorSubject(inputs);
-    useEffect(() => subject$.next(inputs), [inputs]);
-    return useMemo(() => subject$.asObservable(), []);
+    return useMemo(() => {
+        return subjectRef.current.pipe(distinctUntilChanged());
+    }, []);
 };
 
 export const useWhenLayout = <T>(builder: () => T) => {
-    const subject = useMemo(() => new Subject<T>(), []);
+    const subject = useSubject<T>();
     useLayoutEffect(() => subject.next(builder()));
-    useEffect(() => () => subject.complete(), []);
     return subject;
 };
 
-export const useListener = (subscriptionMaker: () => Subscription) => {
-    useEffect(() => {
+export const useListener = (subscriptionMaker: () => Subscription, deps: DependencyList) => {
+    return useEffect(() => {
         const subscription = subscriptionMaker();
-        return () => subscription.unsubscribe();
-    }, []);
+        return () => {
+            subscription.unsubscribe();
+        };
+    }, deps);
 };

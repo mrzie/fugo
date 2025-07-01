@@ -1,120 +1,152 @@
 # Fugo
 
-Sort of react hooks for rxjs. Designed to use rxjs easier in react component.
+React hooks for RxJS. Bridge the reactive world with React components seamlessly.
 
-## Installation
+## Quick Start
 
+```bash
+npm install fugo
 ```
-npm i fugo --save
-```
 
-## API
-
-### useObservable(maker: () => Observable<T>, initialState: T):T
-
-- `maker` the function which returns an Observable instance.
-- `initialState` 
-
-Example: 
 ```javascript
-// ...
 import { useObservable } from 'fugo';
+import { interval } from 'rxjs';
 
-const App = () => {
-    const count = useObservable(() => of(4), 0);
-    // count is 4
-    return <div>
-        <p>{count}</p>
-    </div>
-};
-```
-
-### useEventHandler(defaultHandler?: (source: Observable) => void):[(e: E) => void, Subject<E>]
-Returns a tuple of `[callback, subject]`. The subject emits first params of callback everytime the callback is called.
-
-You can use `defaultHandler` to specificate the default subscription for subject.
-
-```javascript
-// ...
-import { useEventHandler } from 'fugo';
-
-const App = () => {
-    const [onClick, click$] = useEventHandler();
-
-    useEffect(() => {
-        click$.subscribe(e => console.log(e));
-    }, []);
-
-    return <div>
-        <button onClick={onClick}>click me!</button>
-    </div>
-};
-```
-
-### useBehaviorSubject(initValue: T): BehaviorSubject<T>
-Returns a auto-complete BehaviorSubject instance.
-
-```javascript
-// ...
-import { useBehaviorSubject, useObservable } from 'fugo';
-
-const App = () => {
-    const count$ = useBehaviorSubject(0);
-    const isOdd = useObservable(() => count$.pipe(map(v => !!v & 1)), false);
-
-    // ...
-};
-```
-
-### useSubject(): Subject<T>
-Just like `useBehaviorSubject` but returns Subject instance.
-
-### useObservableFrom(input: T): Observable<T>
-Returns an Observable instance which emit `input` value everytime the component render.
-```javascript 
-// ...
-import { useObservableFrom } from 'fugo';
-
-const MyComp = props => {
-    const props$ = useObservableFrom(props);
-    // ...
+function Timer() {
+  const count = useObservable(() => interval(1000), () => 0);
+  return <div>Timer: {count}</div>;
 }
 ```
 
-### useWhenLayout(builder: () => T):Subject<T>
-Returns a Subject which emmits the return value of builder in `onLayoutEffect` stage. Almostly a syntactic sugar of `useEventCallback` and `onLayoutEffect`.
-```javascript
-// ...
-import { useWhenLayout } from 'fugo';
+## Core Concepts
 
-const App = () => {
-    const refRoot = useRef(null);
-    const root$ = useWhenLayout(() => refRoot.current);
+Fugo provides hooks that make RxJS observables work naturally with React's lifecycle and state management. Each hook handles subscription/unsubscription automatically.
 
-    return <div ref={refRoot}>
-    
-    </div>
-}
+## API Reference
+
+### useObservable
+
+Subscribe to an Observable and get its latest value as React state.
+
+```typescript
+useObservable<T>(maker: () => Observable<T>, initialValue: () => T): T
 ```
 
-### useListener(subscriptionMaker: () => Subscription)
-Call `subscriptionMaker` once and automatically unsubscribe when component unmount.
+**Example**: Timer with interval
 ```javascript
-// ...
-import { useListener } from 'fugo';
-
-const App = () => {
-    useListener(() => fromEvent(document, 'scroll').subscribe(e => {
-        console.log('onScroll', e);
-    }));
-    // ... 
-}
-
+const count = useObservable(
+  () => interval(1000),
+  () => 0
+);
 ```
 
+### useEventHandler
+
+Create event handlers that emit to RxJS streams.
+
+```typescript
+useEventHandler<T>(defaultHandler?: (source: Observable<T>) => Subscription): [
+  (event: T) => void, 
+  Subject<T>
+]
+```
+
+**Example**: Debounced search
+```javascript
+const [onSearch, search$] = useEventHandler(
+  source => source.pipe(
+    debounceTime(300),
+    distinctUntilChanged()
+  ).subscribe(query => setResults(search(query)))
+);
+
+return <input onChange={e => onSearch(e.target.value)} />;
+```
+
+### useBehaviorSubject
+
+Create a BehaviorSubject that's cleaned up automatically.
+
+```typescript
+useBehaviorSubject<T>(initialValue: () => T): BehaviorSubject<T>
+```
+
+**Example**: Derived state with operators
+```javascript
+const count$ = useBehaviorSubject(() => 0);
+const isOdd = useObservable(
+  () => count$.pipe(map(v => v % 2 === 1)),
+  () => false
+);
+```
+
+### useSubject
+
+Create a Subject that's cleaned up automatically.
+
+```typescript
+useSubject<T>(): Subject<T>
+```
+
+### useObservableFrom
+
+Convert any value to an Observable that emits on every render.
+
+```typescript
+useObservableFrom<T>(value: T): Observable<T>
+```
+
+**Example**: React props to Observable
+```javascript
+const props$ = useObservableFrom(props);
+const derived = useObservable(
+  () => props$.pipe(map(p => p.name.toUpperCase())),
+  () => ''
+);
+```
+
+### useWhenLayout
+
+Emit values during layout effects.
+
+```typescript
+useWhenLayout<T>(builder: () => T): Subject<T>
+```
+
+**Example**: DOM measurements
+```javascript
+const ref = useRef();
+const size$ = useWhenLayout(() => ref.current?.getBoundingClientRect());
+```
+
+### useListener
+
+Subscribe to an Observable with dependency tracking.
+
+```typescript
+useListener(maker: () => Subscription, deps: DependencyList): void
+```
+
+**Example**: Global event handling
+```javascript
+useListener(
+  () => fromEvent(window, 'resize').subscribe(updateLayout),
+  []
+);
+```
+
+## Migration from 0.1.x
+
+- `useObservable(maker, value)` → `useObservable(maker, () => value)`
+- `useBehaviorSubject(value)` → `useBehaviorSubject(() => value)`
+- `useListener(maker)` → `useListener(maker, [])`
+
+---
 
 ## Who is Fugo?
-**Pannacotta Fugo**, a man from *Jojo's Bizarre Adventure: Golden Wind*, who acts intelligent and caring, but fights brainless and violently.
+
+**Pannacotta Fugo**, a character from *Jojo's Bizarre Adventure: Golden Wind*, who acts intelligent and caring, but fights brainless and violently.
+
 > *This ferocity! It strikes like a bomb, and departs like a storm... This Stand truly reflects the User's personality.*
 >
 > —Leone Abbacchio, Golden Wind
